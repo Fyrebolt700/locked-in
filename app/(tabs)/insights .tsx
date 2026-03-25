@@ -1,9 +1,9 @@
 import { View, Text } from 'react-native'
 
-export default function Index() {
+export default function Insights() {
     return(
         <View>
-            <Text>Index</Text>
+            <Text>Insights</Text>
         </View>
     );
 }

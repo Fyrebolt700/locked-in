@@ -1,9 +1,9 @@
 import { View, Text } from 'react-native'
 
-export default function Index() {
+export default function Schedule() {
     return(
         <View>
-            <Text>Index</Text>
+            <Text>Schedule</Text>
         </View>
     );
 }
