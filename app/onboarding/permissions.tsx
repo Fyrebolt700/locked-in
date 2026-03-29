@@ -1,78 +1,118 @@
-import * as Location from 'expo-location';
-import { useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-// import * as Notifications from 'expo-notifications';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
 import { router } from 'expo-router';
-import { supabase } from '../../services/supabase';
+import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Notifications from 'expo-notifications';
+import * as Location from 'expo-location';
+import * as IntentLauncher from 'expo-intent-launcher';
 
 export default function Permissions() {
-  const [locationGranted, setLocationGranted] = useState(false);
-//   const [notificationsGranted, setNotificationsGranted] = useState(false);
 
-  async function requestLocation() {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status === 'granted') setLocationGranted(true);
-    else Alert.alert('Location needed', 'GPS attendance tracking requires location access. You can enable it later in Settings.');
-  }
+  async function handleRequestPermissions() {
+    // 1. LOCATION PERMISSION
+    const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
+    if (foregroundStatus === 'granted') {
+      // Request background location for the 30-min geofence check
+      await Location.requestBackgroundPermissionsAsync();
+    }
 
-//   async function requestNotifications() {
-//     const { status } = await Notifications.requestPermissionsAsync();
-//     if (status === 'granted') setNotificationsGranted(true);
-//     else Alert.alert('Notifications needed', 'You can enable notifications later in Settings.');
-//   }
+    // 2. NOTIFICATIONS PERMISSION
+    await Notifications.requestPermissionsAsync();
 
-  async function handleFinish() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    await supabase.from('users').upsert({
-      id: user.id,
-      hard_mode_enabled: false,
-      hard_mode_setup_complete: false,
-    });
-
-    router.replace('/(tabs)');
+    // 3. PACKAGE_USAGE_STATS (Android Only - Direct to Settings)
+    if (Platform.OS === 'android') {
+      Alert.alert(
+        "Screen Time Access",
+        "Locked In needs Usage Access to verify you stayed off your phone after bedtime. We will open Settings now. Please find 'Locked In' and grant access.",
+        [
+          { 
+            text: "Skip", 
+            style: "cancel", 
+            onPress: () => router.replace('/(tabs)' as any) 
+          },
+          {
+            text: "Open Settings",
+            onPress: async () => {
+              try {
+                // Opens the specific Android settings menu for Usage Access
+                await IntentLauncher.startActivityAsync(IntentLauncher.ActivityAction.USAGE_ACCESS_SETTINGS);
+              } catch (error) {
+                console.log("Could not open settings", error);
+              } finally {
+                // Drop them into the app after they return from settings
+                router.replace('/(tabs)' as any);
+              }
+            }
+          }
+        ]
+      );
+    } else {
+      // Fallback for iOS/Web
+      router.replace('/(tabs)' as any);
+    }
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>One Last Step</Text>
-      <Text style={styles.subtitle}>Locked In needs a couple of permissions to work properly.</Text>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.content}>
+        <View style={styles.headerContainer}>
+          <Ionicons name="shield-checkmark" size={64} color="#32D74B" />
+          <Text style={styles.title}>Final Setup</Text>
+          <Text style={styles.subtitle}>Locked In requires a few permissions to automate your discipline.</Text>
+        </View>
 
-      <TouchableOpacity
-        style={[styles.permRow, locationGranted && styles.granted]}
-        onPress={requestLocation}
-      >
-        <Text style={styles.permTitle}>📍 Location</Text>
-        <Text style={styles.permDesc}>For GPS attendance tracking</Text>
-        <Text style={styles.status}>{locationGranted ? '✓ Granted' : 'Tap to enable'}</Text>
-      </TouchableOpacity>
+        {/* Location Card */}
+        <View style={styles.card}>
+          <View style={styles.cardRow}>
+            <Ionicons name="location" size={24} color="#1A1C1E" />
+            <View style={styles.cardText}>
+              <Text style={styles.cardTitle}>Location (Background)</Text>
+              <Text style={styles.cardSubtitle}>Required to automatically check you into class.</Text>
+            </View>
+          </View>
+        </View>
 
-      <TouchableOpacity
-        // style={[styles.permRow, notificationsGranted && styles.granted]}
-        // onPress={requestNotifications}
-      >
-        {/* <Text style={styles.permTitle}>🔔 Notifications</Text> */}
-        {/* <Text style={styles.permDesc}>For class reminders and evening planner</Text> */}
-        {/* <Text style={styles.status}>{notificationsGranted ? '✓ Granted' : 'Tap to enable'}</Text> */}
-      </TouchableOpacity>
+        {/* Notifications Card */}
+        <View style={styles.card}>
+          <View style={styles.cardRow}>
+            <Ionicons name="notifications" size={24} color="#1A1C1E" />
+            <View style={styles.cardText}>
+              <Text style={styles.cardTitle}>Notifications</Text>
+              <Text style={styles.cardSubtitle}>Required for bedtime enforcement and class warnings.</Text>
+            </View>
+          </View>
+        </View>
 
-      <TouchableOpacity style={styles.button} onPress={handleFinish}>
-        <Text style={styles.buttonText}>Finish Setup</Text>
-      </TouchableOpacity>
-    </View>
+        {/* Usage Stats Card */}
+        <View style={styles.card}>
+          <View style={styles.cardRow}>
+            <Ionicons name="phone-portrait" size={24} color="#1A1C1E" />
+            <View style={styles.cardText}>
+              <Text style={styles.cardTitle}>Usage Access</Text>
+              <Text style={styles.cardSubtitle}>Required to track late-night screen time.</Text>
+            </View>
+          </View>
+        </View>
+
+        <TouchableOpacity style={styles.primaryButton} onPress={handleRequestPermissions}>
+          <Text style={styles.buttonText}>Enable All & Enter App</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 32, backgroundColor: '#fff' },
-  title: { fontSize: 32, fontWeight: 'bold', marginBottom: 12 },
-  subtitle: { fontSize: 15, color: '#555', marginBottom: 40, lineHeight: 22 },
-  permRow: { padding: 20, borderWidth: 1, borderColor: '#eee', borderRadius: 12, marginBottom: 16 },
-  granted: { borderColor: '#1a7f3c', backgroundColor: '#e6ffed' },
-  permTitle: { fontSize: 18, fontWeight: '600', marginBottom: 4 },
-  permDesc: { fontSize: 14, color: '#555', marginBottom: 8 },
-  status: { fontSize: 13, color: '#888' },
-  button: { backgroundColor: '#000', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginTop: 32 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  content: { flex: 1, justifyContent: 'center', paddingHorizontal: 32 },
+  headerContainer: { alignItems: 'center', marginBottom: 40 },
+  title: { fontSize: 32, fontWeight: '900', color: '#1A1C1E', marginTop: 16 },
+  subtitle: { fontSize: 16, color: '#8A8D91', marginTop: 8, textAlign: 'center', lineHeight: 24 },
+  card: { backgroundColor: '#F4F6F8', borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: '#EBECEF' },
+  cardRow: { flexDirection: 'row', alignItems: 'center' },
+  cardText: { marginLeft: 16, flex: 1 },
+  cardTitle: { fontSize: 16, fontWeight: '800', color: '#1A1C1E' },
+  cardSubtitle: { fontSize: 13, color: '#8A8D91', marginTop: 2, lineHeight: 18 },
+  primaryButton: { backgroundColor: '#32D74B', height: 60, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 32 },
+  buttonText: { color: '#FFF', fontSize: 16, fontWeight: '800' }
 });

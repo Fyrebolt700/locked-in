@@ -1,84 +1,103 @@
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
 import { supabase } from '../../services/supabase';
+import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function SleepSetup() {
   const [bedtime, setBedtime] = useState(new Date());
   const [wakeTime, setWakeTime] = useState(new Date());
-  const [showBedtime, setShowBedtime] = useState(false);
-  const [showWake, setShowWake] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
+  
+  // Controls for the native pickers
+  const [showBedPicker, setShowBedPicker] = useState(false);
+  const [showWakePicker, setShowWakePicker] = useState(false);
 
-  function formatTime(date: Date) {
+  const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
+  };
 
-  async function handleContinue() {
-    setSaving(true);
+  async function handleSaveSleep() {
+    setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { error } = await supabase.from('users').upsert({
-      id: user.id,
-      bedtime: `${bedtime.getHours().toString().padStart(2, '0')}:${bedtime.getMinutes().toString().padStart(2, '0')}`,
-      wake_time: `${wakeTime.getHours().toString().padStart(2, '0')}:${wakeTime.getMinutes().toString().padStart(2, '0')}`,
-    });
-
-    // if (error) console.error(error);
-    if (error) alert(JSON.stringify(error));
-    else router.push('/onboarding/permissions');
-    setSaving(false);
+    
+    if (user) {
+      await supabase.from('users').update({ 
+        bedtime: formatTime(bedtime), 
+        wake_time: formatTime(wakeTime) 
+      }).eq('id', user.id);
+    }
+    
+    setLoading(false);
+    router.push('/onboarding/permissions' as any);
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Sleep Schedule</Text>
-      <Text style={styles.subtitle}>Locked In will activate Do Not Disturb at bedtime automatically.</Text>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.content}>
+        <View style={styles.headerContainer}>
+          <Ionicons name="moon" size={64} color="#5E5CE6" />
+          <Text style={styles.title}>Sleep Architecture</Text>
+          <Text style={styles.subtitle}>When should we lock you out?</Text>
+        </View>
 
-      <TouchableOpacity style={styles.timeRow} onPress={() => setShowBedtime(true)}>
-        <Text style={styles.label}>Bedtime</Text>
-        <Text style={styles.timeValue}>{formatTime(bedtime)}</Text>
-      </TouchableOpacity>
+        <View style={styles.formContainer}>
+          <Text style={styles.label}>BEDTIME</Text>
+          {/* TRIGGERS NATIVE ANDROID/IOS TIME PICKER */}
+          <TouchableOpacity style={styles.timeBox} onPress={() => setShowBedPicker(true)}>
+            <Text style={styles.timeText}>{formatTime(bedtime)}</Text>
+          </TouchableOpacity>
 
-      {showBedtime && (
-        <DateTimePicker
-          value={bedtime}
-          mode="time"
-          is24Hour={false}
-          onChange={(_, date) => { setShowBedtime(false); if (date) setBedtime(date); }}
-        />
-      )}
+          {showBedPicker && (
+            <DateTimePicker
+              value={bedtime}
+              mode="time"
+              display="default"
+              onChange={(event, selectedDate) => {
+                setShowBedPicker(Platform.OS === 'ios');
+                if (selectedDate) setBedtime(selectedDate);
+              }}
+            />
+          )}
 
-      <TouchableOpacity style={styles.timeRow} onPress={() => setShowWake(true)}>
-        <Text style={styles.label}>Wake Time</Text>
-        <Text style={styles.timeValue}>{formatTime(wakeTime)}</Text>
-      </TouchableOpacity>
+          <Text style={[styles.label, { marginTop: 16 }]}>WAKE TIME</Text>
+          <TouchableOpacity style={styles.timeBox} onPress={() => setShowWakePicker(true)}>
+            <Text style={styles.timeText}>{formatTime(wakeTime)}</Text>
+          </TouchableOpacity>
 
-      {showWake && (
-        <DateTimePicker
-          value={wakeTime}
-          mode="time"
-          is24Hour={false}
-          onChange={(_, date) => { setShowWake(false); if (date) setWakeTime(date); }}
-        />
-      )}
+          {showWakePicker && (
+            <DateTimePicker
+              value={wakeTime}
+              mode="time"
+              display="default"
+              onChange={(event, selectedDate) => {
+                setShowWakePicker(Platform.OS === 'ios');
+                if (selectedDate) setWakeTime(selectedDate);
+              }}
+            />
+          )}
 
-      <TouchableOpacity style={styles.button} onPress={handleContinue} disabled={saving}>
-        <Text style={styles.buttonText}>{saving ? 'Saving...' : 'Continue'}</Text>
-      </TouchableOpacity>
-    </View>
+          <TouchableOpacity style={styles.primaryButton} onPress={handleSaveSleep} disabled={loading}>
+            <Text style={styles.buttonText}>{loading ? 'Saving...' : 'Set Schedule'}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 32, backgroundColor: '#fff' },
-  title: { fontSize: 32, fontWeight: 'bold', marginBottom: 12 },
-  subtitle: { fontSize: 15, color: '#555', marginBottom: 40, lineHeight: 22 },
-  timeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 20, borderBottomWidth: 1, borderBottomColor: '#eee', marginBottom: 8 },
-  label: { fontSize: 18, fontWeight: '500' },
-  timeValue: { fontSize: 18, color: '#888' },
-  button: { backgroundColor: '#000', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginTop: 48 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  content: { flex: 1, justifyContent: 'center', paddingHorizontal: 32 },
+  headerContainer: { alignItems: 'center', marginBottom: 40 },
+  title: { fontSize: 32, fontWeight: '900', color: '#1A1C1E', marginTop: 16 },
+  subtitle: { fontSize: 16, color: '#8A8D91', marginTop: 8, textAlign: 'center' },
+  formContainer: { width: '100%' },
+  label: { fontSize: 12, fontWeight: '800', color: '#A0A4A8', letterSpacing: 1, marginBottom: 8 },
+  timeBox: { backgroundColor: '#F4F6F8', borderRadius: 16, height: 60, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#EBECEF' },
+  timeText: { fontSize: 24, fontWeight: '800', color: '#1A1C1E' },
+  primaryButton: { backgroundColor: '#5E5CE6', height: 60, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 32 },
+  buttonText: { color: '#FFF', fontSize: 16, fontWeight: '800' }
 });
